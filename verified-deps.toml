@@ -1,0 +1,92 @@
+# verified-deps.toml — OmniOracle
+#
+# REGOLA: nessuna dipendenza nel codice senza entry verificata qui.
+# Per aggiungere una dipendenza:
+#   1. Web search per documentazione ufficiale
+#   2. Verificare che la versione esista e che i metodi usati siano documentati
+#   3. Aggiungere entry qui con data e fonte di verifica
+#   4. Solo DOPO usare la dipendenza nel codice
+
+[[dependency]]
+name = "numpy"
+version = "2.4.3"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/numpy/ + pip install"
+methods_used = ["ndarray", "random.default_rng", "polyfit", "polyval", "linalg.lstsq", "cumsum", "column_stack"]
+
+[[dependency]]
+name = "pandas"
+version = "3.0.1"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/pandas/ + pip install"
+methods_used = ["Series", "DataFrame", "date_range", "Timestamp", "to_datetime"]
+
+[[dependency]]
+name = "scipy"
+version = "1.17.1"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/scipy/ + pip install"
+methods_used = ["scipy.stats.pearsonr", "scipy.stats.spearmanr"]
+
+[[dependency]]
+name = "scikit-learn"
+version = "1.8.0"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/scikit-learn/ + pip install"
+methods_used = ["sklearn.feature_selection.mutual_info_regression"]
+
+[[dependency]]
+name = "statsmodels"
+version = "0.14.6"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/statsmodels/ + pip install"
+methods_used = ["tsa.stattools.adfuller", "tsa.stattools.kpss", "tsa.api.VAR", "tsa.stattools.grangercausalitytests"]
+
+[[dependency]]
+name = "duckdb"
+version = "1.5.0"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/duckdb/ + pip install"
+methods_used = ["connect", "execute", "fetchone", "fetchall", "fetchdf"]
+
+[[dependency]]
+name = "fredapi"
+version = "0.5.2"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/fredapi/ + pip install"
+methods_used = ["Fred", "Fred.get_series"]
+
+[[dependency]]
+name = "wbgapi"
+version = "1.0.14"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/wbgapi/ + pip install"
+methods_used = ["wbgapi.data.DataFrame"]
+
+[[dependency]]
+name = "pytest"
+version = "9.0.2"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/pytest/ + pip install"
+methods_used = ["pytest.fixture", "pytest.raises"]
+
+[[dependency]]
+name = "hypothesis"
+version = "6.151.9"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/hypothesis/ + pip install"
+methods_used = ["hypothesis.given", "hypothesis.strategies"]
+
+[[dependency]]
+name = "mypy"
+version = "1.19.1"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/mypy/ + pip install"
+methods_used = ["type checking CLI"]
+
+[[dependency]]
+name = "ruff"
+version = "0.15.7"
+verified_date = "2026-03-21"
+verified_via = "https://pypi.org/project/ruff/ + pip install"
+methods_used = ["linting CLI"]

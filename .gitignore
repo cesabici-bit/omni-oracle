@@ -1,0 +1,33 @@
+# Data (large DuckDB files, not tracked)
+data/
+results/
+
+# Environment and secrets
+.env
+.venv/
+*.egg-info/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing/tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+htmlcov/
+.coverage
