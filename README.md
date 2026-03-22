@@ -203,6 +203,10 @@ Python 3.12+ | Pandas | SciPy | Scikit-learn | Statsmodels | DuckDB | FRED API |
 
 MIT
 
+## Acknowledgments
+
+Development assisted by [Claude Code](https://claude.ai/claude-code) (Anthropic).
+
 ## Disclaimer
 
 All results are **statistical associations**, not proof of causation. This is a research tool, not financial advice. Past statistical relationships do not guarantee future persistence.
