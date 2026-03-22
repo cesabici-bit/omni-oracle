@@ -93,8 +93,8 @@ class TestL5KnownRelationships:
         assert h is not None, (
             "Pipeline failed to discover Fed Funds -> Treasury relationship"
         )
-        assert h.granger_pvalue < 0.05, (
-            f"Fed Funds -> Treasury not significant: p={h.granger_pvalue:.4f}"
+        assert h.direction_pvalue < 0.05, (
+            f"Fed Funds -> Treasury not significant: p={h.direction_pvalue:.4f}"
         )
         assert 0 <= h.lag <= 6, (
             f"Unexpected lag for Fed Funds -> Treasury: {h.lag} (expected 0-6 months)"
@@ -113,8 +113,8 @@ class TestL5KnownRelationships:
         assert h is not None, (
             "Pipeline failed to discover Oil -> CPI relationship"
         )
-        assert h.granger_pvalue < 0.05, (
-            f"Oil -> CPI not significant: p={h.granger_pvalue:.4f}"
+        assert h.direction_pvalue < 0.05, (
+            f"Oil -> CPI not significant: p={h.direction_pvalue:.4f}"
         )
         assert 1 <= h.lag <= 12, (
             f"Unexpected lag for Oil -> CPI: {h.lag} (expected 1-12 months)"
@@ -133,8 +133,8 @@ class TestL5KnownRelationships:
         assert h is not None, (
             "Pipeline failed to discover GDP <-> Unemployment (Okun's Law)"
         )
-        assert h.granger_pvalue < 0.05, (
-            f"GDP <-> Unemployment not significant: p={h.granger_pvalue:.4f}"
+        assert h.direction_pvalue < 0.05, (
+            f"GDP <-> Unemployment not significant: p={h.direction_pvalue:.4f}"
         )
         assert 1 <= h.lag <= 8, (
             f"Unexpected lag for GDP <-> Unemployment: {h.lag} (expected 1-8)"
@@ -156,7 +156,7 @@ class TestL5KnownRelationships:
         assert h is not None, (
             "Pipeline failed to discover Initial Claims -> Employment"
         )
-        assert h.granger_pvalue < 0.05
+        assert h.direction_pvalue < 0.05
 
     def test_hy_spread_predicts_activity(
         self, hypotheses: list[Hypothesis]
@@ -174,7 +174,7 @@ class TestL5KnownRelationships:
         assert h is not None, (
             "Pipeline failed to discover HY Spread -> Economic Activity"
         )
-        assert h.granger_pvalue < 0.05
+        assert h.direction_pvalue < 0.05
 
 
 class TestL5PipelineStats:

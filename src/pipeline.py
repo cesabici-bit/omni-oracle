@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.config import PipelineConfig
-from src.discovery.granger import test_granger_bidirectional
+from src.discovery.lagged_mi import detect_direction_lagged_mi
 from src.discovery.mi_screening import compute_mi_with_pvalue
 from src.models import Hypothesis, PairResult, TimeSeries
 from src.output.export import export_json, export_stdout
@@ -92,7 +92,8 @@ def run_pipeline(config: PipelineConfig) -> list[Hypothesis]:
 
         # Stationarity transform
         try:
-            transformed, _ = check_and_transform(series_values.dropna())
+            clean_values = series_values.dropna()
+            transformed, stat_result = check_and_transform(clean_values)
             if len(transformed) < config.min_observations:
                 continue
             processed[s.variable_id] = transformed  # keep as pd.Series with index
@@ -112,12 +113,14 @@ def run_pipeline(config: PipelineConfig) -> list[Hypothesis]:
     n_pairs_total = len(var_ids) * (len(var_ids) - 1) // 2
 
     # Optional Spearman pre-screen for scalability
+    # Checks multiple lags (0, 1, 3, 6, 12) to avoid killing lag-only relationships
     candidate_pairs: set[tuple[int, int]] | None = None
     if config.spearman_prescreen > 0 and len(var_ids) > 50:
         from scipy.stats import spearmanr
 
-        print(f"[3a/7] Spearman pre-screen (|rho| > {config.spearman_prescreen}) "
-              f"on {n_pairs_total} pairs...")
+        spearman_lags = [0, 1, 3, 6, 12]
+        print(f"[3a/7] Lagged Spearman pre-screen (|rho| > {config.spearman_prescreen}, "
+              f"lags={spearman_lags}) on {n_pairs_total} pairs...")
         candidate_pairs = set()
         spearman_done = 0
         for i, j in itertools.combinations(range(len(var_ids)), 2):
@@ -127,14 +130,35 @@ def run_pipeline(config: PipelineConfig) -> list[Hypothesis]:
             if len(x_al) < config.min_observations:
                 spearman_done += 1
                 continue
-            rho, _ = spearmanr(x_al.values, y_al.values)
-            if abs(rho) >= config.spearman_prescreen:
+
+            x_vals = x_al.values
+            y_vals = y_al.values
+            n_al = len(x_vals)
+            passed = False
+
+            for lag_k in spearman_lags:
+                if lag_k == 0:
+                    rho, _ = spearmanr(x_vals, y_vals)
+                elif n_al > lag_k + 20:
+                    # x leads y (x[:-lag] vs y[lag:])
+                    rho_xy, _ = spearmanr(x_vals[:-lag_k], y_vals[lag_k:])
+                    # y leads x (y[:-lag] vs x[lag:])
+                    rho_yx, _ = spearmanr(y_vals[:-lag_k], x_vals[lag_k:])
+                    rho = max(abs(rho_xy), abs(rho_yx))
+                else:
+                    continue
+
+                if abs(rho) >= config.spearman_prescreen:
+                    passed = True
+                    break
+
+            if passed:
                 candidate_pairs.add((i, j))
             spearman_done += 1
             if spearman_done % 500 == 0:
                 print(f"  ... Spearman: {spearman_done}/{n_pairs_total} "
                       f"({len(candidate_pairs)} pass)", flush=True)
-        print(f"  Spearman pre-screen: {len(candidate_pairs)}/{n_pairs_total} "
+        print(f"  Lagged Spearman pre-screen: {len(candidate_pairs)}/{n_pairs_total} "
               f"pairs pass (filtered {n_pairs_total - len(candidate_pairs)})")
 
     # Determine which pairs to screen with MI
@@ -182,48 +206,71 @@ def run_pipeline(config: PipelineConfig) -> list[Hypothesis]:
         repo.close()
         return []
 
-    # Step 5: Granger causality on surviving pairs
-    print(f"[5/7] Granger causality on {len(mi_results)} pairs...")
-    pair_results: list[PairResult] = []
+    # Step 5: Lagged MI directional discovery on surviving pairs
+    print(f"[5/7] Lagged MI direction on {len(mi_results)} pairs...")
 
+    # Prepare aligned arrays for parallel processing
+    lmi_inputs: list[tuple[str, str, float, float, np.ndarray, np.ndarray]] = []
     for x_id, y_id, mi_val, mi_pval in mi_results:
         x_ser, y_ser = processed[x_id], processed[y_id]
         x_aligned, y_aligned = align_pair(x_ser, y_ser, method="inner")
         x_cut = x_aligned.values.astype(float)
         y_cut = y_aligned.values.astype(float)
+        lmi_inputs.append((x_id, y_id, mi_val, mi_pval, x_cut, y_cut))
 
+    def _run_lagged_mi(
+        args: tuple[str, str, float, float, np.ndarray, np.ndarray],
+    ) -> PairResult | None:
+        x_id, y_id, mi_val, mi_pval, x_cut, y_cut = args
         try:
-            gr = test_granger_bidirectional(
-                x_cut, y_cut, max_lag=config.granger_max_lag
+            lmi = detect_direction_lagged_mi(
+                x_cut, y_cut,
+                max_lag=config.max_lag,
+                n_permutations=config.direction_permutations,
+                threshold=config.direction_pvalue_threshold,
             )
         except Exception:
-            continue
+            return None
+        if lmi.direction == "none":
+            return None
+        return PairResult(
+            x=x_id, y=y_id,
+            mi=mi_val, mi_pvalue=mi_pval,
+            direction=lmi.direction,
+            direction_pvalue=lmi.best_pvalue,
+            best_lag=lmi.best_lag,
+            fdr_significant=False,
+            oos_r2=0.0, oos_valid=False,
+        )
 
-        if gr.direction == "none":
-            continue
+    # Parallel execution (use all available CPUs)
+    try:
+        from joblib import Parallel, delayed
 
-        pair_results.append(PairResult(
-            x=x_id,
-            y=y_id,
-            mi=mi_val,
-            mi_pvalue=mi_pval,
-            granger_direction=gr.direction,
-            granger_pvalue=gr.best_pvalue,
-            granger_lag=gr.lag,
-            fdr_significant=False,  # set after FDR
-            oos_r2=0.0,  # set after OOS
-            oos_valid=False,
-        ))
+        results = Parallel(n_jobs=-1, verbose=1)(
+            delayed(_run_lagged_mi)(inp) for inp in lmi_inputs
+        )
+        pair_results = [r for r in results if r is not None]
+    except ImportError:
+        # Fallback to sequential if joblib not available
+        pair_results = []
+        for idx, inp in enumerate(lmi_inputs):
+            r = _run_lagged_mi(inp)
+            if r is not None:
+                pair_results.append(r)
+            if (idx + 1) % 20 == 0:
+                print(f"  ... Lagged MI: {idx + 1}/{len(lmi_inputs)} "
+                      f"({len(pair_results)} directional)", flush=True)
 
-    print(f"[5/7] Granger significant: {len(pair_results)}")
+    print(f"[5/7] Directional pairs: {len(pair_results)}")
 
     if not pair_results:
-        print("No Granger-significant pairs found.")
+        print("No directional pairs found.")
         repo.close()
         return []
 
     # Step 6: FDR correction
-    pvalues = [p.granger_pvalue for p in pair_results]
+    pvalues = [p.direction_pvalue for p in pair_results]
     fdr_mask = benjamini_hochberg(pvalues, alpha=config.fdr_alpha)
     for pr, is_sig in zip(pair_results, fdr_mask):
         pr.fdr_significant = is_sig
@@ -241,7 +288,7 @@ def run_pipeline(config: PipelineConfig) -> list[Hypothesis]:
         try:
             oos = validate_oos(
                 x_cut, y_cut,
-                lag=pr.granger_lag,
+                lag=pr.best_lag,
                 train_ratio=config.oos_train_ratio,
                 r2_threshold=config.oos_r2_threshold,
             )
@@ -266,7 +313,7 @@ def run_pipeline(config: PipelineConfig) -> list[Hypothesis]:
         caveats: list[str] = []
         if not pr.oos_valid:
             caveats.append("Failed out-of-sample validation")
-        if pr.granger_direction == "bidirectional":
+        if pr.direction == "bidirectional":
             caveats.append("Bidirectional -- may indicate common driver")
 
         hypotheses.append(Hypothesis(
@@ -274,10 +321,10 @@ def run_pipeline(config: PipelineConfig) -> list[Hypothesis]:
             score=sp.score,
             x=x_meta,
             y=y_meta,
-            direction=pr.granger_direction,
-            lag=pr.granger_lag,
+            direction=pr.direction,
+            lag=pr.best_lag,
             mi=pr.mi,
-            granger_pvalue=pr.granger_pvalue,
+            direction_pvalue=pr.direction_pvalue,
             oos_r2=pr.oos_r2,
             confidence=sp.confidence,
             caveats=caveats,

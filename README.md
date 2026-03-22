@@ -1,104 +1,128 @@
 # OmniOracle
 
-**Automatic discovery of non-trivial statistical truths from public data.**
+**Automatic discovery of non-trivial statistical truths from heterogeneous public data.**
 
-OmniOracle ingests thousands of public time series across domains (economics, commodities, labor, prices) and automatically discovers causal relationships using a rigorous multi-stage statistical pipeline. No human hypotheses needed -- the engine finds them.
+OmniOracle ingests hundreds of public time series across domains (economics, commodities, labor, prices, demographics) and automatically discovers statistically significant lagged relationships using a rigorous multi-stage pipeline. No human hypotheses needed -- the engine finds them, validates them, and filters out the noise.
 
-<!-- CI badge placeholder -->
-<!-- ![CI](https://github.com/genius-lab/omni-oracle/actions/workflows/ci.yml/badge.svg) -->
+[![CI](https://github.com/cesabici-bit/omni-oracle/actions/workflows/ci.yml/badge.svg)](https://github.com/cesabici-bit/omni-oracle/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## How It Works
+## The Problem
+
+Public data contains thousands of latent relationships. Economists know some (Oil -> CPI, Fed Funds -> Yields), but manually screening 500+ time series (125,000+ pairwise combinations) is intractable. Most automated approaches drown in false positives from multiple testing.
+
+OmniOracle tackles this with a 6-stage statistical pipeline that goes from raw data to validated, ranked hypotheses -- automatically.
+
+## Pipeline
 
 ```
-Public Data APIs (FRED, World Bank, ...)
+Public Data APIs (FRED, World Bank, EIA, NOAA)
          |
-   [Ingest + Normalize]  -->  551 monthly time series
+   [Ingest + Normalize]       551 monthly time series
          |
-   [Quality + Stationarity]  -->  241 series (ADF/KPSS tests)
+   [Quality + Stationarity]   ADF/KPSS tests, differencing
          |
-   [MI Screening]  -->  Mutual Information on all pairs, discard 99%
+   [MI Screening]             Mutual Information: discard 99% of pairs
          |
-   [Granger Causality]  -->  Direction + optimal lag (BIC)
+   [Lagged MI Direction]      Non-linear directional test + optimal lag
          |
-   [FDR Correction]  -->  Benjamini-Hochberg at alpha=0.05
+   [FDR Correction]           Benjamini-Hochberg at alpha=0.05
          |
-   [Out-of-Sample Validation]  -->  Temporal train/test split
+   [OOS Validation]           Ridge/RF walk-forward, incremental R2
          |
-   [Post-Filters]  -->  Remove identity pairs, seasonality artifacts
+   [Post-Filters]             Blacklist derived series, remove identity
+         |                    pairs, high-correlation duplicates
+   [Walk-Forward CV]          Multi-window robustness check
          |
-   [Cross-Validation]  -->  Sub-period robustness check
-         |
-   Ranked Hypothesis Cards with score, p-value, lag, confidence
+   Ranked Hypothesis Cards
 ```
 
-### Discovery Pipeline (6 stages)
+### Why This Order Matters
 
-1. **Mutual Information screening** -- non-parametric dependency measure, catches non-linear relationships that correlation misses
-2. **Granger causality** -- tests whether X's past improves prediction of Y beyond Y's own past, identifies direction and optimal lag
-3. **Benjamini-Hochberg FDR** -- controls false discovery rate across thousands of simultaneous tests
-4. **Out-of-sample validation** -- temporal train/test split, measures incremental R2 on held-out future data
-5. **Post-discovery filters** -- removes identity pairs (same series, different name), high-correlation duplicates, seasonality artifacts
-6. **Cross-validation on sub-periods** -- splits history in half, requires positive R2 in both halves for "ROBUST" label
+Each stage is more expensive than the previous one. MI screening (fast, non-parametric) eliminates 99% of pairs before the expensive directional test runs. FDR correction prevents the multiple-testing explosion. OOS validation catches overfitting. Post-filters catch tautologies (see [Lessons Learned](#lessons-learned)). Walk-forward CV catches regime-dependent relationships.
 
 ## Key Results
 
-From 551 time series (253 FRED + 298 World Bank), the engine discovered:
+### Discovery: It Works
 
-- **4,297 raw hypotheses** -> **3,484 after filters** -> **1,114 OOS-validated**
-- **8/8 known economic relationships rediscovered** without being told to look for them:
-  - Okun's Law (unemployment <-> GDP)
-  - Oil prices -> CPI (3-6 month lag)
-  - Fed Funds Rate <-> Treasury yields
-  - M2 money supply -> inflation
-  - and 4 more
-- **2 ROBUST trading signals** (positive R2 in both sub-periods):
+From 551 time series (253 FRED + 298 World Bank), pipeline v2 (Lagged MI + Ridge/RF walk-forward):
 
-| Signal | Target | Lag | OOS R2 | Backtest Sharpe |
-|--------|--------|-----|--------|-----------------|
-| PCE Price Index | Price Pressures Measure | 1 month | 0.294 | **+2.19** |
-| Brent Crude | Price Pressures Measure | 2 months | 0.215 | **+1.28** |
+| Metric | Value |
+|--------|-------|
+| Clean hypotheses | 6,882 |
+| Known relationships rediscovered | **8/8** (100%) |
+| Walk-forward ROBUST signals | 5 (4 adjusted-robust) |
 
-Both signals beat random strategies at >2 sigma significance.
+The engine finds known economic relationships **without being told to look for them**:
+
+- Okun's Law (unemployment <-> GDP growth)
+- Oil prices -> CPI (3-6 month lag)
+- Fed Funds Rate <-> Treasury yields
+- M2 money supply -> inflation
+- Corporate credit spreads -> economic activity
+- Manufacturing hours -> manufacturing employment
+- Consumer confidence -> retail spending
+- Housing starts -> construction employment
+
+### Trading: It Doesn't Work
+
+The 5 ROBUST signals were backtested with a simple directional strategy (Ridge, 60/40 train/test split). **None beat the random benchmark** (no Sharpe ratio > 2 sigma above random shuffles):
+
+| Signal | Lag | OOS R2 | Backtest Sharpe | vs Random |
+|--------|-----|--------|-----------------|-----------|
+| Imports -> Gas Price | 8 | 0.57 | -0.10 | NO |
+| Imports -> Gas Price | 3 | 0.53 | -0.57 | NO |
+| Imports -> Trade Balance | 11 | 0.52 | -0.15 | NO |
+| USD/EUR -> Semiconductor | 8 | 0.22 | -0.15 | NO |
+| Fed Collateral -> Exports | 4 | 0.21 | +0.14 | NO |
+
+**Why high R2 but no trading edge?** Walk-forward R2 measures variance explained -- the model captures the *shape* of the relationship. But directional trading needs consistent *sign* prediction, and with near-zero coefficients or regime-shifting relationships, the direction is essentially a coin flip. Additionally, Imports -> Trade Balance is near-tautological (imports are an accounting component of trade balance).
+
+### Conclusions
+
+1. **The discovery engine works**: it reliably finds genuine statistical relationships, including all known benchmarks
+2. **Public monthly macro data has no tradable edge**: if a signal in FRED data were actionable, it would have been arbitraged away long ago
+3. **Statistical significance != economic significance**: a relationship can be statistically robust but have zero practical value
+4. **Honest negative results are valuable**: knowing that automated discovery from public data doesn't produce alpha is useful information for anyone considering this path
 
 ## Installation
 
 ```bash
-# Clone
-git clone https://github.com/genius-lab/omni-oracle.git
+git clone https://github.com/cesabici-bit/omni-oracle.git
 cd omni-oracle
 
-# Setup
 python -m venv .venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -e ".[dev]"
 
-# Set FRED API key (free at https://fred.stlouisfed.org/docs/api/api_key.html)
+# Set FRED API key (free: https://fred.stlouisfed.org/docs/api/api_key.html)
 echo "FRED_API_KEY=your_key_here" > .env
 ```
 
 ## Usage
 
 ```bash
-# Run tests
-pytest tests/ -v
-
-# Full check (lint + test + verify)
+# Run all checks (lint + test + cross-tool verification)
 make check-all
+
+# Run tests only
+pytest tests/ -v
 
 # Ingest data (requires FRED_API_KEY)
 python -m src.ingest.fred --limit 500
 python -m src.ingest.worldbank --limit 300
 
 # Run discovery pipeline
-python -m src.pipeline --source fred worldbank --db data/f5_discovery.duckdb
+python -m src.run_f5
 
-# View filtered results (fast, from cache)
-python -m src.run_f5_filter
+# Apply filters + cross-validation (fast, from cache)
+python -m src.run_f5_filter --refilter
 
-# Re-run filters from scratch
+# Re-run full pipeline from scratch (~50 min)
 python -m src.run_f5_filter --recompute
 
-# Backtest ROBUST trading signals
+# Backtest ROBUST signals
 python -m src.backtest
 ```
 
@@ -108,47 +132,68 @@ Each discovery is a **Hypothesis Card**:
 
 ```
 +-----------------------------------------------------------+
-| #9  Score: 7.5/10  [HIGH]
+| #6  Score: 7.1/10  [HIGH]
 +-----------------------------------------------------------+
-|  Personal Consumption Expenditures: Chain-type Price Index
-|    x->y  (lag: 1 periods)
-|  Price Pressures Measure
+|  ICE BofA US Corporate Index Option-Adjusted Spread
+|    x->y  (lag: 2 periods)
+|  Chicago Fed National Activity Index
 |
-|  MI: 0.0650  |  Granger p: 7.57e-29  |  OOS R2: 0.2941
+|  MI: 0.1335  |  Direction p: 9.90e-03  |  OOS R2: 0.2581
 +-----------------------------------------------------------+
 ```
 
-Fields: mutual information, Granger p-value, out-of-sample R2, direction, lag, confidence level, caveats.
+## Verification
+
+5-level verification framework designed to catch errors at every stage:
+
+| Level | What | How |
+|-------|------|-----|
+| **L1** Unit | Each function does what it claims | 46 unit tests |
+| **L2** Domain | Results are plausible in the domain | 11 tests with values from published sources (Granger 1969, Toda-Yamamoto 1995, FRED docs) |
+| **L3** Property | Statistical invariants hold for any valid input | 6 property-based tests (Hypothesis library) |
+| **L4** Golden | Pipeline output is stable and human-reviewed | Smoke test snapshot, approved once |
+| **L5** Real data | System rediscovers known truths from literature | 10 tests against documented economic relationships |
+
+**Cross-tool verification (M4)**: Alternative MI (histogram-based) and Granger (manual OLS) implementations in `verify/` confirm main pipeline results.
+
+Total: **118 tests**, all passing.
+
+## Lessons Learned
+
+### EC-003: Derived Series Create Tautological Discoveries
+
+The St. Louis Fed Price Pressures Measure (STLPPM) is a FAVAR model that takes 104 input series (including PCE and commodity prices) and outputs a 12-month forward inflation probability. When we included STLPPM as a discoverable variable, the engine correctly found that PCE and Brent Crude "predict" it -- but this is circular (input predicts output of model), not a genuine causal discovery.
+
+**Fix**: Blacklist derived/model-based series. Before including any series in the discovery pool, verify: (1) is it forward-looking? (2) are its inputs already in the pool?
+
+**Reference**: Jackson, Kliesen, Owyang (2015) "A Measure of Price Pressures", Federal Reserve Bank of St. Louis Review, 97(1), pp.25-52.
+
+### High Walk-Forward R2 Does Not Imply Tradability
+
+Walk-forward cross-validation measures whether a model consistently explains variance across time windows. A signal can have R2 = 0.57 (strong) but produce Sharpe = -0.10 (useless for trading) because:
+- The regression coefficient can be near-zero (direction prediction is noise)
+- The relationship can be near-tautological (accounting identity, not causal)
+- Regime shifts can invert the coefficient sign between windows
+
+**Takeaway**: OOS R2 validates *statistical* relationships. *Economic* significance requires separate testing (backtest, position sizing, transaction costs).
 
 ## Project Structure
 
 ```
 omni-oracle/
   src/
-    ingest/        # Data fetchers (FRED, World Bank)
+    ingest/        # Data fetchers (FRED, World Bank, EIA, NOAA)
     storage/       # DuckDB repository layer
     preprocess/    # Quality checks, stationarity transforms
-    discovery/     # MI screening, Granger causality
-    validation/    # FDR correction, OOS validation
+    discovery/     # MI screening, lagged MI directional test
+    validation/    # FDR correction, OOS temporal validation (Ridge/RF)
     scoring/       # Composite ranking
-    output/        # Hypothesis cards, trading reports, filters
-    backtest.py    # Trading signal backtesting
+    output/        # Hypothesis cards, trading reports, walk-forward CV
     pipeline.py    # End-to-end orchestrator
-  tests/           # 63+ tests (unit, L2 domain, L3 property-based, L5 real data)
-  verify/          # M4 cross-tool verification (alternative implementations)
+    backtest.py    # Trading signal backtester
+  tests/           # 118 tests (L1-L5 verification levels)
+  verify/          # M4 cross-tool verification
 ```
-
-## Verification
-
-OmniOracle uses a 5-level verification framework:
-
-- **L1**: Unit tests on every module
-- **L2**: Domain sanity tests with values from external sources (Granger 1969, Toda-Yamamoto 1995, FRED documentation)
-- **L3**: Property-based tests (Hypothesis library) checking statistical invariants
-- **L4**: Golden snapshot -- smoke test output reviewed by human
-- **L5**: Real-data validation -- system must rediscover known economic relationships from literature
-
-Cross-tool verification (M4): alternative MI and Granger implementations in `verify/` confirm main pipeline results.
 
 ## Tech Stack
 
@@ -160,4 +205,4 @@ MIT
 
 ## Disclaimer
 
-All results are **statistical associations**, not proof of causation. Trading signals are historical backtests -- past performance does not guarantee future results. This is a research tool, not financial advice.
+All results are **statistical associations**, not proof of causation. This is a research tool, not financial advice. Past statistical relationships do not guarantee future persistence.

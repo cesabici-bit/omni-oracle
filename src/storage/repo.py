@@ -37,8 +37,8 @@ class TimeSeriesRepo:
             """
             INSERT OR REPLACE INTO series
                 (variable_id, source, name, frequency, unit,
-                 geo, observations, start_date, end_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 geo, observations, start_date, end_date, domain)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 ts.variable_id,
@@ -50,6 +50,7 @@ class TimeSeriesRepo:
                 ts.observations,
                 ts.start_date,
                 ts.end_date,
+                ts.domain,
             ],
         )
 
@@ -70,6 +71,7 @@ class TimeSeriesRepo:
             observations=result[6],
             start_date=result[7],
             end_date=result[8],
+            domain=result[9] if len(result) > 9 else "economics",
         )
 
     def list_series(
@@ -99,6 +101,7 @@ class TimeSeriesRepo:
                 observations=r[6],
                 start_date=r[7],
                 end_date=r[8],
+                domain=r[9] if len(r) > 9 else "economics",
             )
             for r in rows
         ]

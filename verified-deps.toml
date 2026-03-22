@@ -33,7 +33,7 @@ name = "scikit-learn"
 version = "1.8.0"
 verified_date = "2026-03-21"
 verified_via = "https://pypi.org/project/scikit-learn/ + pip install"
-methods_used = ["sklearn.feature_selection.mutual_info_regression"]
+methods_used = ["sklearn.feature_selection.mutual_info_regression", "sklearn.linear_model.Ridge", "sklearn.ensemble.RandomForestRegressor"]
 
 [[dependency]]
 name = "statsmodels"
@@ -90,3 +90,10 @@ version = "0.15.7"
 verified_date = "2026-03-21"
 verified_via = "https://pypi.org/project/ruff/ + pip install"
 methods_used = ["linting CLI"]
+
+[[dependency]]
+name = "httpx"
+version = "0.28.1"
+verified_date = "2026-03-22"
+verified_via = "https://pypi.org/project/httpx/ — already installed in venv"
+methods_used = ["Client", "Client.get", "HTTPError", "HTTPStatusError"]

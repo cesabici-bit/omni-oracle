@@ -1,12 +1,14 @@
-"""F5 Phase 0: Scale to 500+ variables, full discovery, trading analysis.
+"""F5 Phase 0: Scale to 1000+ variables, full discovery, trading analysis.
 
 This script:
 1. Ingests expanded FRED series (curated 49 + ~300 discovered via search API)
 2. Ingests expanded World Bank series (30 indicators x 10 countries)
-3. Runs full discovery pipeline (Spearman pre-screen + MI + Granger + FDR + OOS)
-4. Exports top 50 hypotheses
-5. Identifies top 10 trading candidates
-6. Saves results to results/ directory
+3. Ingests EIA energy series (15 curated: oil, gas, electricity, renewables)
+4. Ingests NOAA climate series (10 stations x 6 datatypes = 60 series)
+5. Runs full discovery pipeline (Spearman pre-screen + MI + Lagged MI + FDR + OOS)
+6. Exports top 50 hypotheses
+7. Identifies top 10 trading candidates
+8. Saves results to results/ directory
 
 Usage:
     python -m src.run_f5
@@ -26,8 +28,10 @@ import time
 from pathlib import Path
 
 from src.config import PipelineConfig
+from src.ingest.eia import EIAFetcher
 from src.ingest.fred import CURATED_FRED_SERIES, FREDFetcher
 from src.ingest.fred_expanded import discover_fred_series
+from src.ingest.noaa import NOAAFetcher
 from src.ingest.worldbank import WorldBankFetcher
 from src.output.export import export_json
 from src.output.hypothesis import render_card
@@ -72,6 +76,20 @@ KNOWN_RELATIONSHIPS = [
     {
         "name": "Yield Curve -> Recession",
         "keywords": [("T10Y2Y", "SPREAD"), ("GDP", "UNRATE", "INDPRO")],
+    },
+    # Cross-domain: Energy -> Economy
+    {
+        "name": "Oil Price -> CPI (EIA)",
+        "keywords": [("WTI", "RWTC", "BRENT", "RBRTE"), ("CPI", "CPIAUCSL")],
+    },
+    {
+        "name": "Natural Gas -> Electricity Gen",
+        "keywords": [("HENRY", "NG_RNGC1", "RNGWHHD"), ("ELEC_GEN",)],
+    },
+    # Cross-domain: Climate -> Energy
+    {
+        "name": "Temperature -> Energy Consumption",
+        "keywords": [("TAVG", "TMAX", "HTDD", "CLDD"), ("ENERGY_CONSUMPTION", "ELEC_GEN")],
     },
 ]
 
@@ -173,6 +191,36 @@ def step_1_ingest() -> int:
         print(f"  WARN: World Bank ingestion failed: {e}")
         wb_ingested = []
 
+    # --- EIA: Energy data ---
+    print()
+    print("[EIA] Ingesting energy series...")
+    try:
+        eia_fetcher = EIAFetcher()
+        eia_ingested = eia_fetcher.ingest(repo, limit=100)
+        print(f"  EIA: {len(eia_ingested)} series ingested")
+        eia_fetcher.close()
+    except ValueError as e:
+        print(f"  WARN: EIA skipped ({e})")
+        eia_ingested = []
+    except Exception as e:
+        print(f"  WARN: EIA ingestion failed: {e}")
+        eia_ingested = []
+
+    # --- NOAA: Climate data ---
+    print()
+    print("[NOAA] Ingesting climate series...")
+    try:
+        noaa_fetcher = NOAAFetcher()
+        noaa_ingested = noaa_fetcher.ingest(repo, limit=100)
+        print(f"  NOAA: {len(noaa_ingested)} series ingested")
+        noaa_fetcher.close()
+    except ValueError as e:
+        print(f"  WARN: NOAA skipped ({e})")
+        noaa_ingested = []
+    except Exception as e:
+        print(f"  WARN: NOAA ingestion failed: {e}")
+        noaa_ingested = []
+
     # Summary
     total = repo.count_series()
     print()
@@ -191,7 +239,7 @@ def step_2_discover() -> list:
 
     config = PipelineConfig(
         db_path=F5_DB_PATH,
-        sources=["fred", "worldbank"],
+        sources=["fred", "worldbank", "eia", "noaa"],
         limit=9999,  # no limit — use all ingested series
         min_observations=48,  # lower threshold: 4y monthly / 48y annual
         mi_permutations=30,  # fewer permutations for speed (early stopping helps)
@@ -412,8 +460,8 @@ def main() -> None:
     print()
 
     print("  CHECKPOINT: verifica utente")
-    print("  Cosa ho fatto: discovery su 500+ variabili FRED + World Bank")
-    print("  Cosa ti mostro: report ipotesi + trading candidates")
+    print("  Cosa ho fatto: discovery su 4 fonti (FRED + World Bank + EIA + NOAA)")
+    print("  Cosa ti mostro: report ipotesi + trading candidates cross-domain")
     print("  Cosa devi verificare: le relazioni trovate hanno senso?")
     print("  Risposta attesa: OK / problema trovato / skip")
 

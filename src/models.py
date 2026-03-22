@@ -19,6 +19,7 @@ class TimeSeries:
     observations: int  # number of data points
     start_date: date
     end_date: date
+    domain: str = "economics"  # "economics" | "energy" | "climate" | "health" | "social"
 
 
 @dataclass
@@ -29,9 +30,9 @@ class PairResult:
     y: str  # variable_id of Y
     mi: float  # Mutual Information (nats)
     mi_pvalue: float  # p-value from permutation test
-    granger_direction: str  # "x→y" | "y→x" | "bidirectional" | "none"
-    granger_pvalue: float  # p-value Granger (best direction)
-    granger_lag: int  # optimal lag (BIC)
+    direction: str  # "x->y" | "y->x" | "bidirectional" | "none"
+    direction_pvalue: float  # p-value for directional test (lagged MI)
+    best_lag: int  # optimal lag (argmax lagged MI)
     fdr_significant: bool  # survives BH correction?
     oos_r2: float  # incremental R² out-of-sample
     oos_valid: bool  # OOS R² > threshold
@@ -45,10 +46,10 @@ class Hypothesis:
     score: float  # composite 0-10
     x: TimeSeries
     y: TimeSeries
-    direction: str  # "x→y" | "y→x" | "bidirectional"
+    direction: str  # "x->y" | "y->x" | "bidirectional"
     lag: int
     mi: float
-    granger_pvalue: float
+    direction_pvalue: float  # p-value for directional test
     oos_r2: float
     confidence: str  # "high" | "medium" | "low"
     caveats: list[str] = field(default_factory=list)

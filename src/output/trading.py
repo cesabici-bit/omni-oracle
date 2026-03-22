@@ -18,13 +18,13 @@ def identify_trading_candidates(
     """Identify and rank trading candidates from hypotheses.
 
     Criteria for trading candidates:
-    - Unidirectional Granger causality (x->y or y->x, not bidirectional)
+    - Unidirectional direction (x->y or y->x, not bidirectional)
     - Lag >= min_lag (signal must lead target by at least 1 period)
     - OOS R2 > min_oos_r2 (out-of-sample predictive power)
     - FDR-significant (survives multiple testing correction)
 
     Returns list of dicts sorted by OOS R2 (descending), each with:
-    - signal, target, direction, lag, oos_r2, granger_pvalue,
+    - signal, target, direction, lag, oos_r2, direction_pvalue,
       mi, score, confidence, signal_description
     """
     candidates: list[dict] = []
@@ -64,14 +64,14 @@ def identify_trading_candidates(
             "direction": h.direction,
             "lag_periods": h.lag,
             "oos_r2": h.oos_r2,
-            "granger_pvalue": h.granger_pvalue,
+            "direction_pvalue": h.direction_pvalue,
             "mi": h.mi,
             "score": h.score,
             "confidence": h.confidence,
             "signal_description": (
                 f"{signal.name} predicts {target.name} "
                 f"with {h.lag}-period lag (OOS R2={h.oos_r2:.4f}, "
-                f"p={h.granger_pvalue:.2e})"
+                f"p={h.direction_pvalue:.2e})"
             ),
         })
 
@@ -88,7 +88,7 @@ def render_trading_report(candidates: list[dict]) -> str:
     lines = [
         "=" * 70,
         "  OmniOracle -- Top Trading Candidates",
-        "  (Unidirectional Granger causality with predictive lag)",
+        "  (Unidirectional lagged MI with predictive lag)",
         "=" * 70,
         "",
     ]
@@ -100,7 +100,7 @@ def render_trading_report(candidates: list[dict]) -> str:
             f"    --> Target: {c['target_name']}",
             f"    Lag: {c['lag_periods']} periods  |  "
             f"OOS R2: {c['oos_r2']:.4f}  |  "
-            f"Granger p: {c['granger_pvalue']:.2e}  |  "
+            f"Dir p: {c['direction_pvalue']:.2e}  |  "
             f"MI: {c['mi']:.4f}",
             f"    {c['signal_description']}",
             "",

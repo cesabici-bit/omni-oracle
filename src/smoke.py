@@ -150,7 +150,7 @@ def run_smoke() -> bool:
     fields_ok = all(
         h.score is not None
         and h.mi is not None
-        and h.granger_pvalue is not None
+        and h.direction_pvalue is not None
         and h.lag is not None
         and h.direction is not None
         and h.oos_r2 is not None

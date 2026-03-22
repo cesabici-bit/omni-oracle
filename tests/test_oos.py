@@ -88,3 +88,36 @@ class TestOOS:
         y = np.array([4.0, 5.0, 6.0])
         with pytest.raises(AssertionError):
             validate_oos(x, y, lag=2)
+
+
+class TestOOSMultiModel:
+    """Tests for multi-model OOS (OLS + Ridge + RF)."""
+
+    def test_nonlinear_relationship_positive_r2(self) -> None:
+        """Y = X_{t-1}^2 + noise should have positive OOS R² with multi-model.
+
+        Old OLS-only OOS would likely fail this since OLS can't capture
+        the quadratic relationship. Multi-model with RF should succeed.
+        """
+        rng = np.random.default_rng(42)
+        n = 400
+        x = rng.standard_normal(n)
+        y = np.zeros(n)
+        for t in range(1, n):
+            y[t] = 0.8 * x[t - 1] ** 2 + 0.3 * rng.standard_normal()
+
+        result = validate_oos(x, y, lag=1)
+        # With multi-model (RF), this should be detected
+        assert result.r2_incremental > 0.0, (
+            f"Multi-model should detect quadratic relationship, got R²={result.r2_incremental:.4f}"
+        )
+
+    def test_linear_still_works(
+        self, var2_synthetic: tuple[np.ndarray, np.ndarray]
+    ) -> None:
+        """Linear relationship should still be detected (no regression)."""
+        x, y = var2_synthetic
+        result = validate_oos(x, y, lag=2)
+        assert result.r2_incremental > 0, (
+            f"Multi-model should still detect linear: R²={result.r2_incremental:.4f}"
+        )

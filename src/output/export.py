@@ -22,7 +22,7 @@ def to_dict(h: Hypothesis) -> dict:
         "direction": h.direction,
         "lag": h.lag,
         "mi": h.mi,
-        "granger_pvalue": h.granger_pvalue,
+        "direction_pvalue": h.direction_pvalue,
         "oos_r2": h.oos_r2,
         "confidence": h.confidence,
         "caveats": h.caveats,
@@ -53,7 +53,7 @@ def export_csv(
 
     fieldnames = [
         "rank", "score", "x_id", "x_name", "y_id", "y_name",
-        "direction", "lag", "mi", "granger_pvalue", "oos_r2",
+        "direction", "lag", "mi", "direction_pvalue", "oos_r2",
         "confidence", "caveats",
     ]
     with open(path, "w", newline="") as f:

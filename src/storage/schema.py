@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS series (
     geo VARCHAR NOT NULL,
     observations INTEGER,
     start_date DATE,
-    end_date DATE
+    end_date DATE,
+    domain VARCHAR NOT NULL DEFAULT 'economics'
 );
 
 CREATE TABLE IF NOT EXISTS observations (
@@ -32,7 +33,7 @@ CREATE TABLE IF NOT EXISTS hypotheses (
     direction VARCHAR NOT NULL,
     lag INTEGER,
     mi DOUBLE,
-    granger_pvalue DOUBLE,
+    direction_pvalue DOUBLE,
     oos_r2 DOUBLE,
     score DOUBLE,
     confidence VARCHAR

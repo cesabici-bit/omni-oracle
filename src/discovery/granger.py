@@ -2,6 +2,10 @@
 
 Tests whether past values of X help predict Y beyond Y's own past.
 Uses VAR model for lag selection and F-test for significance.
+
+Supports cointegration-aware testing: if both series are I(1) and
+cointegrated, tests Granger on levels (preserving long-run relationship)
+instead of differenced series. See Engle & Granger (1987).
 """
 
 from __future__ import annotations
@@ -11,7 +15,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.api import VAR
-from statsmodels.tsa.stattools import grangercausalitytests
+from statsmodels.tsa.stattools import coint, grangercausalitytests
 
 from src.config import GRANGER_MAX_LAG, GRANGER_PVALUE_THRESHOLD
 
@@ -25,6 +29,7 @@ class GrangerResult:
     pvalue_yx: float  # p-value for Y→X
     best_pvalue: float  # min of the two relevant p-values
     lag: int  # optimal lag (BIC)
+    cointegrated: bool = False  # whether pair was tested on levels
 
 
 def select_lag_bic(
@@ -77,21 +82,54 @@ def test_granger(
         return 1.0  # non-significant on error
 
 
+def test_cointegration(
+    x: np.ndarray,
+    y: np.ndarray,
+    alpha: float = 0.05,
+) -> tuple[bool, float]:
+    """Test if x and y are cointegrated using Engle-Granger test.
+
+    Returns (is_cointegrated, pvalue).
+    """
+    try:
+        _, pvalue, _ = coint(x, y)
+        return pvalue < alpha, float(pvalue)
+    except Exception:
+        return False, 1.0
+
+
 def test_granger_bidirectional(
     x: np.ndarray,
     y: np.ndarray,
     max_lag: int = GRANGER_MAX_LAG,
     threshold: float = GRANGER_PVALUE_THRESHOLD,
+    x_raw: np.ndarray | None = None,
+    y_raw: np.ndarray | None = None,
 ) -> GrangerResult:
     """Test Granger causality in both directions.
 
-    1. Select optimal lag via BIC on VAR(x, y).
-    2. Test X→Y (does X help predict Y?).
-    3. Test Y→X (does Y help predict X?).
-    4. Determine direction based on p-values.
+    1. If x_raw/y_raw provided: test cointegration on levels.
+       If cointegrated: run Granger on LEVELS (not differenced).
+       This catches long-run causal relationships that differencing destroys.
+    2. Select optimal lag via BIC on VAR(x, y).
+    3. Test X->Y (does X help predict Y?).
+    4. Test Y->X (does Y help predict X?).
+    5. Determine direction based on p-values.
     """
     assert len(x) == len(y), f"Length mismatch: {len(x)} vs {len(y)}"
     assert len(x) >= 30, f"Too few observations for Granger: {len(x)}"
+
+    cointegrated = False
+
+    # Cointegration check: if raw (undifferenced) series provided, test them
+    if x_raw is not None and y_raw is not None and len(x_raw) == len(y_raw):
+        is_coint, _ = test_cointegration(x_raw, y_raw)
+        if is_coint:
+            # Use levels instead of differenced — Granger on levels is valid
+            # when series are cointegrated (Engle & Granger 1987, Toda & Phillips 1993)
+            cointegrated = True
+            x = x_raw
+            y = y_raw
 
     lag = select_lag_bic(x, y, max_lag)
 
@@ -118,4 +156,5 @@ def test_granger_bidirectional(
         pvalue_yx=pvalue_yx,
         best_pvalue=best_pvalue,
         lag=lag,
+        cointegrated=cointegrated,
     )

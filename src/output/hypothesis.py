@@ -20,7 +20,7 @@ def render_card(h: Hypothesis) -> str:
         f"|    {h.direction}  (lag: {h.lag} periods)\n"
         f"|  {h.y.name}\n"
         f"|\n"
-        f"|  MI: {h.mi:.4f}  |  Granger p: {h.granger_pvalue:.2e}  |  OOS R2: {h.oos_r2:.4f}\n"
+        f"|  MI: {h.mi:.4f}  |  Dir p: {h.direction_pvalue:.2e}  |  OOS R2: {h.oos_r2:.4f}\n"
         f"|  Sources: {h.x.source}:{h.x.variable_id}"
         f" -> {h.y.source}:{h.y.variable_id}{caveats_str}\n"
         f"|\n"

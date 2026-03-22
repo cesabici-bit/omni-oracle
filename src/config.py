@@ -23,9 +23,14 @@ MI_PVALUE_THRESHOLD = 0.05  # p-value threshold for MI screening
 MI_TOP_FRACTION = 0.10  # keep top 10% of pairs by MI (alternative to p-value)
 
 
-# --- Granger Causality ---
-GRANGER_MAX_LAG = 12  # maximum lag to test (months)
-GRANGER_PVALUE_THRESHOLD = 0.05  # p-value threshold before FDR
+# --- Directional Discovery (Lagged MI) ---
+MAX_LAG = 12  # maximum lag to test (months)
+DIRECTION_PERMUTATIONS = 100  # permutations for lagged MI p-value
+DIRECTION_PVALUE_THRESHOLD = 0.05  # p-value threshold before FDR
+
+# Backward-compatible aliases (deprecated)
+GRANGER_MAX_LAG = MAX_LAG
+GRANGER_PVALUE_THRESHOLD = DIRECTION_PVALUE_THRESHOLD
 
 
 # --- FDR ---
@@ -39,9 +44,12 @@ OOS_R2_THRESHOLD = 0.02  # minimum incremental R² to consider OOS valid
 
 # --- Scoring weights ---
 SCORE_WEIGHT_MI = 0.25
-SCORE_WEIGHT_GRANGER = 0.25
+SCORE_WEIGHT_DIRECTION = 0.25
 SCORE_WEIGHT_OOS = 0.35
 SCORE_WEIGHT_EFFECT = 0.15
+
+# Backward-compatible alias (deprecated)
+SCORE_WEIGHT_GRANGER = SCORE_WEIGHT_DIRECTION
 
 
 @dataclass
@@ -54,7 +62,9 @@ class PipelineConfig:
     min_observations: int = MIN_OBSERVATIONS
     mi_permutations: int = MI_PERMUTATIONS
     mi_pvalue_threshold: float = MI_PVALUE_THRESHOLD
-    granger_max_lag: int = GRANGER_MAX_LAG
+    max_lag: int = MAX_LAG
+    direction_permutations: int = DIRECTION_PERMUTATIONS
+    direction_pvalue_threshold: float = DIRECTION_PVALUE_THRESHOLD
     fdr_alpha: float = FDR_ALPHA
     oos_train_ratio: float = OOS_TRAIN_RATIO
     oos_r2_threshold: float = OOS_R2_THRESHOLD

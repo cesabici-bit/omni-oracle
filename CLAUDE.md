@@ -124,7 +124,7 @@ omni-oracle/
 ### F5 Roadmap (post-MVP)
 
 #### Fase 0 (Mesi 0-3): Proprietary Trading + Credibilita' [IN PARALLELO]
-- [ ] Scaling a 500+ variabili (FRED + World Bank + Eurostat)
+- [x] Scaling a 500+ variabili (FRED + World Bank + Eurostat)
 - [ ] Identificare top 10 relazioni con lag prevedibile per TRADING
 - [ ] Backtest su dati storici (train/test split)
 - [ ] Paper trading per 3 mesi
@@ -180,6 +180,10 @@ omni-oracle/
 | ST-12 | Smoke test E2E | DONE (5/5 PASS, L4 approvato) |
 | ST-13 | Verification L2/L5 | DONE (L2:11, L3:6, L5:10 test) |
 | ST-14 | M4 cross-tool verification | DONE (Granger 8/8, MI 7/8) |
+| ST-15 | Domain field in DataModel | DONE |
+| ST-16 | Update fetcher (incremental) | DONE |
+| ST-17 | EIA fetcher (energy data) | DONE (code + test) |
+| ST-18 | NOAA fetcher (climate/weather) | DONE (code + test) |
 
 ## Meccanismi Anti-Allucinazione (M1-M4)
 

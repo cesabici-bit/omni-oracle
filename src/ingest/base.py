@@ -57,6 +57,7 @@ class BaseFetcher(ABC):
                     frequency=meta.get("frequency", "unknown"),
                     unit=meta.get("unit", ""),
                     geo=meta.get("geo", "US"),
+                    domain=meta.get("domain", "economics"),
                     observations=len(df),
                     start_date=pd.Timestamp(df["ts"].min()).date(),
                     end_date=pd.Timestamp(df["ts"].max()).date(),

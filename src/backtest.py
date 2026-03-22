@@ -1,11 +1,11 @@
-"""Backtesting module for OmniOracle trading signals.
+"""Backtesting module for OmniOracle trading signals (v2).
 
 Tests whether lagged statistical relationships identified by the discovery
 engine have predictive value in a simple directional trading strategy.
 
 Strategy: for each (signal, target, lag) tuple:
   - At time t, observe signal change at t
-  - Predict target direction at t+lag based on OLS coefficient sign from training set
+  - Predict target direction at t+lag based on Ridge coefficient sign from training set
   - Go long if predicted up, short if predicted down
   - Compute returns on test set only
 
@@ -21,30 +21,56 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.linear_model import Ridge
 
 from src.preprocess.stationarity import check_and_transform
 from src.storage.repo import TimeSeriesRepo
 
 F5_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "f5_discovery.duckdb"
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
+V2_TRADING_PATH = RESULTS_DIR / "f5_v2_trading.json"
 
-# The two ROBUST relationships from cross-validation
+# v2 ROBUST signals from walk-forward cross-validation (Lagged Spearman + RF)
 ROBUST_SIGNALS = [
     {
-        "name": "PCE_Price_to_Price_Pressures",
-        "signal_id": "fred:PCEPI",
-        "signal_name": "Personal Consumption Expenditures: Chain-type Price Index",
-        "target_id": "fred:STLPPM",
-        "target_name": "Price Pressures Measure",
-        "lag": 1,
+        "name": "Imports_to_GasPrice_lag8",
+        "signal_id": "fred:IMPGS",
+        "signal_name": "Imports of Goods and Services",
+        "target_id": "fred:GASREGW",
+        "target_name": "US Regular All Formulations Gas Price",
+        "lag": 8,
     },
     {
-        "name": "Brent_to_Price_Pressures",
-        "signal_id": "fred:POILBREUSDM",
-        "signal_name": "Global price of Brent Crude",
-        "target_id": "fred:STLPPM",
-        "target_name": "Price Pressures Measure",
-        "lag": 2,
+        "name": "Imports_to_GasPrice_lag3",
+        "signal_id": "fred:IMPGS",
+        "signal_name": "Imports of Goods and Services",
+        "target_id": "fred:GASREGM",
+        "target_name": "US Regular All Formulations Gas Price",
+        "lag": 3,
+    },
+    {
+        "name": "Imports_to_TradeBalance",
+        "signal_id": "fred:IMPGS",
+        "signal_name": "Imports of Goods and Services",
+        "target_id": "fred:BOPGSTB",
+        "target_name": "Trade Balance: Goods and Services",
+        "lag": 11,
+    },
+    {
+        "name": "USDEUR_to_Semiconductor",
+        "signal_id": "fred:DEXUSEU",
+        "signal_name": "US/Euro Exchange Rate",
+        "target_id": "fred:IPG3344S",
+        "target_name": "Industrial Production: Semiconductor",
+        "lag": 8,
+    },
+    {
+        "name": "FedCollateral_to_Exports",
+        "signal_id": "fred:RESPPNTEPPNWW",
+        "signal_name": "Collateralization of Currency: Holdings Against FRN",
+        "target_id": "fred:EXPGS",
+        "target_name": "Exports of Goods and Services",
+        "lag": 4,
     },
 ]
 
@@ -155,17 +181,13 @@ def run_backtest(
     y_test = target_current[n_train:]
     test_dates = dates_aligned[n_train:]
 
-    # Train: simple OLS to get beta sign
-    x_train_aug = np.column_stack([np.ones(n_train), x_train])
-    try:
-        beta, _, _, _ = np.linalg.lstsq(x_train_aug, y_train, rcond=None)
-    except np.linalg.LinAlgError:
-        raise ValueError("OLS failed")
-
-    beta_signal = beta[1]  # coefficient of signal
+    # Train: Ridge regression to get coefficient sign (consistent with pipeline v2)
+    model = Ridge(alpha=1.0)
+    model.fit(x_train.reshape(-1, 1), y_train)
+    beta_signal = float(model.coef_[0])
 
     # Generate positions on test set: +1 (long) or -1 (short)
-    predictions = beta_signal * x_test
+    predictions = model.predict(x_test.reshape(-1, 1))
     positions = np.where(predictions > 0, 1.0, -1.0)
 
     # Strategy returns
@@ -337,7 +359,7 @@ def main() -> None:
 
     # Export
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = RESULTS_DIR / "f5_backtest.json"
+    output_path = RESULTS_DIR / "f5_v2_backtest.json"
     output_data = {
         "disclaimer": (
             "Backtest on historical data. "
