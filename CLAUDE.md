@@ -45,9 +45,9 @@ Costruire un engine che ingerisce decine di migliaia di serie temporali pubblich
                     │ ENGINE      │
                     │             │
                     │ L1: MI screening (scarta 99%)
-                    │ L2: Granger + Transfer Entropy
-                    │ L3: DAG discovery (PC algo)
-                    │ L4: Interaction detection
+                    │ L2: Lagged MI directional test
+                    │    (rileva direzione + lag ottimale)
+                    │ [Future: DAG discovery, Transfer Entropy]
                     └────┬────────┘
                          │
                     ┌────▼────────┐
@@ -87,10 +87,8 @@ omni-oracle/
 │   │   └── loader.py
 │   ├── discovery/       # Il cuore statistico
 │   │   ├── mi_screening.py      # Mutual Information screening
-│   │   ├── granger.py           # Granger causality
-│   │   ├── transfer_entropy.py  # Non-linear causality
-│   │   ├── dag_discovery.py     # PC algorithm / DAG
-│   │   └── interaction.py       # Conditional dependencies
+│   │   ├── lagged_mi.py         # Lagged MI directional test (pipeline principale)
+│   │   └── granger.py           # Granger causality (solo in verify/, non nella pipeline)
 │   ├── validation/      # Filtro anti-bullshit
 │   │   ├── fdr.py               # Benjamini-Hochberg
 │   │   ├── temporal_oos.py      # Out-of-sample validation
@@ -115,7 +113,7 @@ omni-oracle/
 - [x] Ingestione da 2 fonti (FRED + World Bank)
 - [x] 49 serie FRED curate cross-domain
 - [x] MI screening su tutte le coppie
-- [x] Granger causality sulle coppie sopravvissute
+- [x] Lagged MI directional test sulle coppie sopravvissute
 - [x] FDR correction (Benjamini-Hochberg)
 - [x] Out-of-sample temporal validation
 - [x] Output: hypothesis cards con score, p-value, lag, fonti
@@ -156,7 +154,7 @@ omni-oracle/
 | Livello | Fonte | Uso |
 |---------|-------|-----|
 | L2 (sanity) | Correlazioni note in letteratura economica (es: oil price → CPI con lag 3-6 mesi) | Verificare che il discovery engine le trovi |
-| L2 (sanity) | Granger causality paper seminali (Granger 1969, Toda-Yamamoto 1995) | Verificare implementazione su dataset sintetici |
+| L2 (sanity) | Lagged MI + Granger reference (Granger 1969, Toda-Yamamoto 1995) | Verificare implementazione su dataset sintetici (Granger solo in verify/) |
 | L5 (reale) | Paper "alternative data" con risultati replicabili (es: satellite parking → retail earnings) | Verificare che il sistema riscopra verità note |
 | L5 (reale) | FRED known relationships (Fed Funds Rate → Unemployment, Okun's Law) | Il sistema deve trovare queste senza che gliele diciamo |
 
@@ -172,7 +170,7 @@ omni-oracle/
 | ST-04 | World Bank fetcher | DONE (code), needs integration test |
 | ST-05 | Preprocessing (stationarity + quality) | DONE (10 test) |
 | ST-06 | MI screening | DONE (7 test, L2+L3) |
-| ST-07 | Granger causality | DONE (6 test, L2) |
+| ST-07 | Lagged MI directional test | DONE (6 test, L2). NB: granger.py esiste ma usato solo in verify/ (M4) |
 | ST-08 | FDR correction | DONE (7 test) |
 | ST-09 | OOS validation | DONE (6 test, anti-leakage) |
 | ST-10 | Scoring + output | DONE |
@@ -202,8 +200,9 @@ omni-oracle/
 - Per OmniOracle: lo smoke test è "ingerisci 100 serie, trova almeno 3 correlazioni note"
 
 ### M4: Two-Tool Verification
-- Directory `verify/` con script R (o Julia) che calcolano MI e Granger sugli stessi dati
-- CI confronta output Python vs R — devono concordare entro tolleranza
+- Directory `verify/` con implementazioni alternative (MI histogram-based + Granger manual OLS) sugli stessi dati
+- CI confronta output pipeline principale vs verify/ — devono concordare entro tolleranza
+- NB: Granger è usato SOLO qui come cross-check, NON nella pipeline principale (che usa Lagged MI)
 
 ## Workflow con Phase Gates
 
@@ -225,7 +224,7 @@ Vedi `genius-lab/CLAUDE.md` per il workflow completo. Phase gates specifici di q
 - [x] 14 subtask completati (ST-01 → ST-14)
 
 ### Gate Verifica (F4) — PASSED
-- [x] L1: 46 unit test su storage, stationarity, MI, Granger, FDR, OOS
+- [x] L1: 46 unit test su storage, stationarity, MI, Lagged MI, FDR, OOS
 - [x] L2: 11 test con correlazioni note (`# SOURCE:`)
 - [x] L3: 6 property-based test (Hypothesis)
 - [x] L4: golden snapshot — smoke test 5/5, lista verita' revisionata dall'umano
